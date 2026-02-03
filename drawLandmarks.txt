@@ -1,0 +1,77 @@
+    const drawLandmarks = useCallback((landmarks, handedness) => {
+        if (!canvasRef.current || !showLandmarks) return;
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Mirror context for front-facing camera
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.translate(-canvas.width, 0);
+
+        // Draw connections
+        const connections = HandLandmarker.HAND_CONNECTIONS;
+        ctx.strokeStyle = handedness === 'Right' ? '#00ff00' : '#ff0000';
+        ctx.lineWidth = 2;
+
+        connections.forEach(([start, end]) => {
+            const startPoint = landmarks[start];
+            const endPoint = landmarks[end];
+
+            if (startPoint && endPoint) {
+                ctx.beginPath();
+                ctx.moveTo(startPoint.x * canvas.width, startPoint.y * canvas.height);
+                ctx.lineTo(endPoint.x * canvas.width, endPoint.y * canvas.height);
+                ctx.stroke();
+            }
+        });
+
+        // Draw landmarks
+        landmarks.forEach((landmark, index) => {
+            const x = landmark.x * canvas.width;
+            const y = landmark.y * canvas.height;
+
+            // Different colors for different parts
+            let color = '#ffffff';
+            let radius = 3;
+
+            if (index === 0) { // Wrist
+                color = '#ff0000';
+                radius = 5;
+            } else if (index >= 1 && index <= 4) { // Thumb
+                color = '#ff9900';
+            } else if (index >= 5 && index <= 8) { // Index
+                color = '#00ff00';
+            } else if (index >= 9 && index <= 12) { // Middle
+                color = '#0099ff';
+            } else if (index >= 13 && index <= 16) { // Ring
+                color = '#ff00ff';
+            } else if (index >= 17 && index <= 20) { // Pinky
+                color = '#ffff00';
+            }
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // Draw landmark number
+            if (showLandmarks) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px Arial';
+                ctx.fillText(index.toString(), x - 3, y - 5);
+            }
+        });
+
+        ctx.restore();
+
+        // Draw FPS counter
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px monospace';
+        ctx.fillText(`FPS: ${fps.toFixed(1)}`, 10, 20);
+        ctx.fillText(`Gesture: ${useGameStore.getState().gesture || 'None'}`, 10, 40);
+        ctx.fillText(`Confidence: ${(useGameStore.getState().gestureConfidence * 100).toFixed(0)}%`, 10, 60);
+    }, [showLandmarks, fps]);

@@ -1,0 +1,141 @@
+            setFps(frameCount.current);
+            frameCount.current = 0;
+            fpsInterval.current = currentTime;
+        }
+    }, []);
+
+    // Predict webcam
+    // Update calibration bounds
+    const updateCalibrationBounds = useCallback((x, y) => {
+        const cal = calibrationData.current;
+        cal.minX = Math.min(cal.minX, x);
+        cal.maxX = Math.max(cal.maxX, x);
+        cal.minY = Math.min(cal.minY, y);
+        cal.maxY = Math.max(cal.maxY, y);
+        cal.centerX = (cal.minX + cal.maxX) / 2;
+        cal.centerY = (cal.minY + cal.maxY) / 2;
+    }, []);
+
+    // Trigger game actions based on gestures
+    const triggerGameAction = useCallback((gesture, confidence) => {
+        if (confidence < 0.6) return;
+
+        switch (gesture) {
+            case 'fist':
+                // Continuous fire while fist is held
+                fireLaser('hand_controller');
+                break;
+            case 'pointing':
+                // Single shot
+                if (confidence > 0.8) {
+                    fireLaser('hand_controller');
+                }
+                break;
+            case 'peace':
+                // Activate special weapon
+                activatePowerUp('double_shot');
+                break;
+            case 'thumbs_up':
+                // Health power-up
+                activatePowerUp('health');
+                break;
+            case 'thumbs_down':
+                // Pause game
+                pauseGame();
+                break;
+            case 'ok':
+                // Change weapon
+                changeWeapon('next');
+                break;
+            case 'pinch':
+                // Zoom in/aim
+                setSensitivity(prev => Math.min(prev + 0.1, 1));
+                break;
+            case 'swipe_left':
+                // Previous weapon
+                changeWeapon('previous');
+                break;
+            case 'swipe_right':
+                // Next weapon
+                changeWeapon('next');
+                break;
+            default:
+                break;
+        }
+    }, [fireLaser, activatePowerUp, pauseGame, changeWeapon]);
+
+    const predictWebcam = useCallback(() => {
+        if (!handLandmarkerRef.current || !videoRef.current) return;
+
+        const startTimeMs = performance.now();
+        calculateFPS(startTimeMs);
+
+        // Skip frames for performance
+        const skipFrames = performanceMode === 'low' ? 3 :
+            performanceMode === 'balanced' ? 2 : 1;
+
+        if (frameCount.current % skipFrames !== 0) {
+            animationFrameRef.current = requestAnimationFrame(predictWebcam);
+            return;
+        }
+
+        try {
+            const results = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
+
+            if (results.landmarks && results.landmarks.length > 0) {
+                setHandDetected(true);
+
+                // Get primary hand
+                const primaryHandIndex = results.handedness[0][0].categoryName === 'Right' ? 0 :
+                    results.landmarks.length > 1 ? 1 : 0;
+                const landmarks = results.landmarks[primaryHandIndex];
+                const handType = results.handedness[primaryHandIndex][0].categoryName;
+
+                setHandedness(handType === 'Right' ? 'right' : 'left');
+
+                // Normalize and set position
+                const wrist = landmarks[0];
+                const position = normalizeHandPosition(wrist.x, wrist.y, wrist.z);
+                setHandPosition(position.x, position.y, position.z);
+
+                // Detect gestures
+                const detectedGesture = gestureEngine.detectGestures(landmarks, handType, useGameStore.getState().gesture);
+                const smoothedGesture = gestureEngine.bufferGesture(detectedGesture);
+
+                if (smoothedGesture) {
+                    setGesture(smoothedGesture.name);
+                    setGestureConfidence(smoothedGesture.confidence);
+
+                    // Trigger game actions based on gesture
+                    triggerGameAction(smoothedGesture.name, smoothedGesture.confidence);
+                }
+
+                // Store landmarks for game use
+                setHandLandmarks(landmarks);
+
+                // Draw landmarks if enabled
+                if (canvasRef.current) {
+                    drawLandmarks(landmarks, handType);
+                }
+
+                // Update calibration bounds dynamically
+                updateCalibrationBounds(wrist.x, wrist.y);
+            } else {
+                setHandDetected(false);
+                setGesture(null);
+                setGestureConfidence(0);
+            }
+        } catch (error) {
+            console.error("Prediction error:", error);
+        }
+
+        animationFrameRef.current = requestAnimationFrame(predictWebcam);
+    }, [calculateFPS, performanceMode, normalizeHandPosition, drawLandmarks, gestureEngine]);
+
+    // Update calibration bounds
+
+
+    // Reset calibration
+    const resetCalibration = useCallback(() => {
+        calibrationData.current = {
+            minX: 0.5,
