@@ -50,7 +50,8 @@ class GestureRecognitionEngine {
         const AB = Math.sqrt(Math.pow(B.x - A.x, 2) + Math.pow(B.y - A.y, 2));
         const BC = Math.sqrt(Math.pow(B.x - C.x, 2) + Math.pow(B.y - C.y, 2));
         const AC = Math.sqrt(Math.pow(C.x - A.x, 2) + Math.pow(C.y - A.y, 2));
-        return Math.acos((BC * BC + AB * AB - AC * AC) / (2 * BC * AB));
+        const cosAngle = (BC * BC + AB * AB - AC * AC) / (2 * BC * AB);
+        return Math.acos(Math.min(1, Math.max(-1, cosAngle)));
     }
 
     // Calculate distance between two points
@@ -63,20 +64,21 @@ class GestureRecognitionEngine {
     }
 
     // Check if finger is extended
-    static isFingerExtended(landmarks, fingerIndices, threshold = 0.85) {
+    static isFingerExtended(landmarks, fingerIndices, threshold = 2.0) {
         const tip = landmarks[fingerIndices[3]];
         const base = landmarks[fingerIndices[0]];
-        const mid = landmarks[fingerIndices[2]];
+        const mid = landmarks[fingerIndices[1]];
 
         // Calculate extension angle
         const angle = this.calculateAngle(base, mid, tip);
-        const distance = this.calculateDistance(tip, base);
+        // Removed distance check as it causes issues when hand is far from camera
+        // const distance = this.calculateDistance(tip, base);
 
-        return angle > threshold && distance > 0.15;
+        return angle > threshold;
     }
 
     // Detect complex gestures
-    detectGestures(landmarks, handedness, previousGesture = null) {
+    detectGestures(landmarks, handedness) {
         const gestures = [];
 
         // Fist detection - all fingers curled
@@ -492,7 +494,7 @@ const HandController = () => {
             console.error("❌ Webcam access error:", err);
             alert(`Camera access denied: ${err.message}\n\nPlease allow camera access to play with hand gestures.`);
         }
-    }, []);
+    }, [predictWebcam]);
 
     // Start calibration
     const startCalibration = useCallback(() => {
