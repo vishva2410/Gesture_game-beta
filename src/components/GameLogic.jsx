@@ -29,6 +29,7 @@ const GameLogic = () => {
     const updateParticles = useGameStore(state => state.updateParticles);
     const updateBoss = useGameStore(state => state.updateBoss);
     const gesture = useGameStore(state => state.gesture);
+    const activePowerUps = useGameStore(state => state.activePowerUps);
     const handPosition = useGameStore(state => state.handPosition);
     const addLaser = useGameStore(state => state.addLaser);
     const addEnemy = useGameStore(state => state.addEnemy);
@@ -166,15 +167,22 @@ const GameLogic = () => {
 
     // Handle shooting with power-ups
     const handleShooting = useCallback((time, delta) => {
-        if (gesture === 'fist') {
-            const fireRate = 0.15 / Math.max(1, powerLevel * 0.3);
+        if (gesture === 'fist' || gesture === 'pointing') {
+            const isRapid = activePowerUps['rapid'] > Date.now();
+            const isMulti = activePowerUps['multi'] > Date.now();
+
+            // Base fire rate. Rapid powerup makes it faster.
+            let baseFireRate = 0.15;
+            if (gesture === 'pointing') baseFireRate = 0.25;
+
+            const fireRate = baseFireRate / Math.max(1, (powerLevel * 0.3) + (isRapid ? 2 : 0));
 
             if (time - lastShot.current > fireRate) {
                 lastShot.current = time;
                 playSound('laser_shoot');
 
                 // Multi-shot based on power level
-                const shotCount = powerLevel >= 4 ? 3 : 1;
+                const shotCount = (powerLevel >= 4 || isMulti) ? 3 : 1;
 
                 for (let i = 0; i < shotCount; i++) {
                     const spread = shotCount > 1 ? (i - (shotCount - 1) / 2) * 0.5 : 0;
@@ -306,7 +314,8 @@ const GameLogic = () => {
             const dz = laser.z - 0;
             const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (distance < 2 && !useGameStore.getState().invincible) {
+            const isShielded = activePowerUps['shield'] > Date.now();
+            if (distance < 2 && !useGameStore.getState().invincible && !isShielded) {
                 newHealth -= 10;
                 setHealth(newHealth);
                 playSound('player_hit');
@@ -363,6 +372,32 @@ const GameLogic = () => {
         return { newScore, newHealth, newCombo };
     }, [score, health, combo, handPosition, createExplosion, playSound, addMessage]);
 
+    // Apply power-up effects
+    const applyPowerUp = useCallback((type) => {
+        switch (type) {
+            case 'health':
+                setHealth(Math.min(MAX_HEALTH, health + 30));
+                addMessage('Health +30', 1500);
+                break;
+            case 'rapid':
+                useGameStore.getState().setPowerUpActive('rapid', 10);
+                addMessage('Rapid Fire!', 1500);
+                break;
+            case 'shield':
+                useGameStore.getState().setInvincible(8);
+                addMessage('Shield Active!', 1500);
+                break;
+            case 'multi':
+                useGameStore.getState().setPowerUpActive('multi', 12);
+                addMessage('Multi-shot!', 1500);
+                break;
+            case 'score':
+                useGameStore.getState().setPowerUpActive('score', 15);
+                addMessage('2x Score!', 1500);
+                break;
+        }
+    }, [health, setHealth, addMessage]);
+
     // Update power-ups
     const updatePowerUpsLogic = useCallback((powerUpsArray, delta) => {
         return powerUpsArray.map(powerUp => {
@@ -404,32 +439,6 @@ const GameLogic = () => {
             };
         }).filter(p => !p.collected && p.z < 10);
     }, [handPosition, createExplosion, playSound]);
-
-    // Apply power-up effects
-    const applyPowerUp = useCallback((type) => {
-        switch (type) {
-            case 'health':
-                setHealth(Math.min(MAX_HEALTH, health + 30));
-                addMessage('Health +30', 1500);
-                break;
-            case 'rapid':
-                useGameStore.getState().setPowerUpActive('rapid', 10);
-                addMessage('Rapid Fire!', 1500);
-                break;
-            case 'shield':
-                useGameStore.getState().setInvincible(8);
-                addMessage('Shield Active!', 1500);
-                break;
-            case 'multi':
-                useGameStore.getState().setPowerUpActive('multi', 12);
-                addMessage('Multi-shot!', 1500);
-                break;
-            case 'score':
-                useGameStore.getState().setPowerUpActive('score', 15);
-                addMessage('2x Score!', 1500);
-                break;
-        }
-    }, [health, setHealth, addMessage]);
 
     // Spawn boss enemy
     const spawnBoss = useCallback(() => {

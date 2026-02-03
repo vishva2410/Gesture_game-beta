@@ -22,6 +22,7 @@ export const useGameStore = create((set) => ({
   scoreMultiplier: 1,
   invincible: false,
   timeLeft: 0,
+  activePowerUps: {},
 
   // Combat State
   lasers: [], // { id, x, y, z, type, ... }
@@ -100,12 +101,15 @@ export const useGameStore = create((set) => ({
   addPowerUp: (powerUp) => set((state) => ({ powerUps: [...state.powerUps, powerUp] })),
   updatePowerUps: (newPowerUps) => set({ powerUps: newPowerUps }),
   activatePowerUp: (type) => {
-    // Logic to be handled in GameLogic via state changes or flags
+    // Logic handled via GameLogic calling setPowerUpActive, or here
     console.log("PowerUp Activated:", type);
   },
-  setPowerUpActive: () => {
-    // Could set a flag here
-  },
+  setPowerUpActive: (type, duration) => set((state) => ({
+    activePowerUps: {
+      ...state.activePowerUps,
+      [type]: Date.now() + duration * 1000
+    }
+  })),
 
   // Particles
   addParticle: (particle) => set((state) => ({ particles: [...state.particles, particle] })),
