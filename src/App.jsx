@@ -2,12 +2,14 @@ import React, { Suspense } from 'react';
 import HandController from './components/HandController';
 import GameScene from './components/GameScene';
 import UIOverlay from './components/UIOverlay';
+import KeyboardController from './components/KeyboardController';
 
 
 function App() {
   return (
     <>
       <HandController />
+      <KeyboardController />
       <GameScene />
       <UIOverlay />
       <div style={{

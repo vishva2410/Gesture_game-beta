@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useGameStore } from '../store';
 import './UIOverlay.css'; // Optional: you can keep inline styles or use CSS
 
@@ -10,6 +10,7 @@ const UIOverlay = () => {
         score,
         startGame,
         resetGame,
+        pauseGame,
         selectedCity,
         selectedShip,
         isHandDetected,
@@ -17,7 +18,9 @@ const UIOverlay = () => {
         health,
         highScore,
         timeLeft,
-        wave
+        wave,
+        controlMode,
+        setControlMode
     } = useGameStore();
 
     const shipTypes = {
@@ -65,6 +68,9 @@ const UIOverlay = () => {
         }
     };
 
+    const canStart = controlMode !== 'hand' || isHandDetected;
+    const keyboardActive = controlMode === 'keyboard' || (!isHandDetected && controlMode === 'auto');
+
     // Victory confetti effect
     useEffect(() => {
         if (phase === 'victory') {
@@ -77,12 +83,41 @@ const UIOverlay = () => {
         }
     }, [phase]);
 
-    const handleStartGame = async () => {
-        if (!isHandDetected) return;
+    const handleStartGame = useCallback(async () => {
         setIsLoading(true);
         await startGame();
         setIsLoading(false);
-    };
+    }, [startGame]);
+
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            if (event.repeat) return;
+            const tag = event.target?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea') return;
+
+            if (event.code === 'Space') {
+                event.preventDefault();
+                if (phase === 'menu') {
+                    handleStartGame();
+                    return;
+                }
+                if (phase === 'playing' || phase === 'paused') {
+                    pauseGame();
+                    return;
+                }
+                if (phase === 'gameOver' || phase === 'victory') {
+                    resetGame();
+                }
+            }
+
+            if (event.code === 'KeyR') {
+                if (phase !== 'menu') resetGame();
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [phase, pauseGame, resetGame, handleStartGame]);
 
     if (phase === 'menu') {
         return (
@@ -171,16 +206,18 @@ const UIOverlay = () => {
                                 ✋
                             </div>
                             <div className="status-info">
-                                <h3>HAND TRACKING</h3>
+                                <h3>INPUT STATUS</h3>
                                 <p className={isHandDetected ? 'status-good' : 'status-bad'}>
                                     {isHandDetected
-                                        ? '✓ System Ready - Hand Detected'
-                                        : '⚠ Searching for hand...'}
+                                        ? '✓ Hand Tracking Active'
+                                        : keyboardActive
+                                            ? '⌨️ Keyboard Mode Active'
+                                            : '⚠ Searching for hand...'}
                                 </p>
                                 <p className="hint">
                                     {isHandDetected
                                         ? 'Move hand left/right to steer'
-                                        : 'Show your hand clearly to the camera'}
+                                        : 'Use WASD/Arrow keys to steer'}
                                 </p>
                             </div>
                         </div>
@@ -191,6 +228,28 @@ const UIOverlay = () => {
                         </div>
                     </div>
 
+                    {/* Control Mode */}
+                    <div className="control-mode">
+                        <div className="control-mode-label">CONTROL MODE</div>
+                        <div className="control-mode-buttons">
+                            <button
+                                className={`control-mode-button ${controlMode === 'auto' ? 'active' : ''}`}
+                                onClick={() => setControlMode('auto')}
+                            >
+                                AUTO
+                            </button>
+                            <button
+                                className={`control-mode-button ${controlMode === 'keyboard' ? 'active' : ''}`}
+                                onClick={() => setControlMode('keyboard')}
+                            >
+                                KEYBOARD
+                            </button>
+                        </div>
+                        <div className="control-mode-hint">
+                            Auto uses hand tracking when available and falls back to keyboard.
+                        </div>
+                    </div>
+
                     {/* High Score */}
                     <div className="high-score">
                         🏆 HIGH SCORE: <span className="score-value">{Math.floor(highScore)}</span>
@@ -198,9 +257,9 @@ const UIOverlay = () => {
 
                     {/* Start Button */}
                     <button
-                        className={`start-button ${isHandDetected ? 'enabled' : 'disabled'} ${isLoading ? 'loading' : ''}`}
+                        className={`start-button ${canStart ? 'enabled' : 'disabled'} ${isLoading ? 'loading' : ''}`}
                         onClick={handleStartGame}
-                        disabled={!isHandDetected || isLoading}
+                        disabled={!canStart || isLoading}
                     >
                         {isLoading ? (
                             <>
@@ -210,7 +269,7 @@ const UIOverlay = () => {
                         ) : (
                             <>
                                 <span className="button-icon">🚀</span>
-                                {isHandDetected ? 'IGNITE ENGINES' : 'AWAITING HAND SIGNAL'}
+                                {isHandDetected ? 'IGNITE ENGINES' : 'START (KEYBOARD READY)'}
                                 <span className="button-hotkey">(SPACE)</span>
                             </>
                         )}
@@ -219,11 +278,11 @@ const UIOverlay = () => {
                     {/* Controls Legend */}
                     <div className="controls-legend">
                         <div className="control-item">
-                            <kbd>← →</kbd>
+                            <kbd>← → / A D</kbd>
                             <span>Steer Ship</span>
                         </div>
                         <div className="control-item">
-                            <kbd>✊</kbd>
+                            <kbd>F / Click</kbd>
                             <span>Fire Lasers</span>
                         </div>
                         <div className="control-item">
@@ -291,6 +350,67 @@ const UIOverlay = () => {
         );
     }
 
+    if (phase === 'gameOver') {
+        return (
+            <div className="ui-overlay gameover-overlay">
+                <div className="ui-container victory-container">
+                    <div className="trophy-icon">💥</div>
+                    <h1 className="victory-title">SHIP DESTROYED</h1>
+
+                    <div className="score-display">
+                        <div className="score-item">
+                            <span className="score-label">FINAL SCORE</span>
+                            <span className="score-value-large">{Math.floor(score)}</span>
+                        </div>
+                        <div className="score-item">
+                            <span className="score-label">HIGH SCORE</span>
+                            <span className="score-value-large">{Math.floor(highScore)}</span>
+                        </div>
+                    </div>
+
+                    <p className="victory-message">
+                        You fought hard. Ready for another run?
+                    </p>
+
+                    <div className="action-buttons">
+                        <button className="action-button primary" onClick={startGame}>
+                            <span className="button-icon">🔄</span>
+                            TRY AGAIN
+                        </button>
+                        <button className="action-button secondary" onClick={resetGame}>
+                            <span className="button-icon">🏠</span>
+                            BACK TO MENU
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (phase === 'paused') {
+        return (
+            <div className="ui-overlay paused-overlay">
+                <div className="ui-container victory-container">
+                    <div className="trophy-icon">⏸️</div>
+                    <h1 className="victory-title">PAUSED</h1>
+                    <p className="victory-message">
+                        Take a breather. Resume when you are ready.
+                    </p>
+                    <div className="action-buttons">
+                        <button className="action-button primary" onClick={pauseGame}>
+                            <span className="button-icon">▶️</span>
+                            RESUME
+                        </button>
+                        <button className="action-button secondary" onClick={resetGame}>
+                            <span className="button-icon">🏠</span>
+                            EXIT
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // In-Game HUD
     return (
         <div className="ui-overlay game-hud">
@@ -324,9 +444,9 @@ const UIOverlay = () => {
                     </div>
 
                     <div className="connection-status">
-                        <div className={`status-dot ${isHandDetected ? 'connected' : 'disconnected'}`} />
+                        <div className={`status-dot ${isHandDetected || keyboardActive ? 'connected' : 'disconnected'}`} />
                         <span className="status-text">
-                            {isHandDetected ? 'CONNECTED' : 'NO SIGNAL'}
+                            {isHandDetected ? 'HAND' : keyboardActive ? 'KEYBOARD' : 'NO SIGNAL'}
                         </span>
                     </div>
                 </div>
@@ -362,7 +482,7 @@ const UIOverlay = () => {
                     <button className="hud-button" onClick={resetGame} title="Restart">
                         <span className="button-icon">🔄</span>
                     </button>
-                    <button className="hud-button" onClick={() => console.log('Pause')} title="Pause">
+                    <button className="hud-button" onClick={pauseGame} title="Pause">
                         <span className="button-icon">⏸️</span>
                     </button>
                 </div>

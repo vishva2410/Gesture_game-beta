@@ -4,7 +4,7 @@ import { useGameStore } from '../store';
 import { Box, Stars, Trail, Float, Text } from '@react-three/drei';
 import Track from './Track';
 import GameLogic from './GameLogic';
-import { Lasers, Enemies } from './CombatElements';
+import { Lasers, Enemies, Boss } from './CombatElements';
 
 // Custom hook for ship movement
 const useShipMovement = (shipRef) => {
@@ -203,6 +203,7 @@ Environment.displayName = 'Environment';
 const MemoizedTrack = memo(Track);
 const MemoizedLasers = memo(Lasers);
 const MemoizedEnemies = memo(Enemies);
+const MemoizedBoss = memo(Boss);
 
 // Main Game Scene
 const GameScene = () => {
@@ -230,6 +231,7 @@ const GameScene = () => {
             <MemoizedTrack />
             <MemoizedLasers />
             <MemoizedEnemies />
+            <MemoizedBoss />
             <Ship />
             
             {/* Performance monitoring (development only) */}

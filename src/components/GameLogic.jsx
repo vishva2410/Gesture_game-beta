@@ -14,6 +14,11 @@ const GameLogic = () => {
     const combo = useGameStore(state => state.combo);
     const setPowerLevel = useGameStore(state => state.setPowerLevel);
     const powerLevel = useGameStore(state => state.powerLevel);
+    const rapidFire = useGameStore(state => state.rapidFire);
+    const multiShot = useGameStore(state => state.multiShot);
+    const scoreMultiplier = useGameStore(state => state.scoreMultiplier);
+    const setWave = useGameStore(state => state.setWave);
+    const setTimeLeft = useGameStore(state => state.setTimeLeft);
 
     // Game objects
     const lasers = useGameStore(state => state.lasers);
@@ -29,7 +34,6 @@ const GameLogic = () => {
     const updateParticles = useGameStore(state => state.updateParticles);
     const updateBoss = useGameStore(state => state.updateBoss);
     const gesture = useGameStore(state => state.gesture);
-    const activePowerUps = useGameStore(state => state.activePowerUps);
     const handPosition = useGameStore(state => state.handPosition);
     const addLaser = useGameStore(state => state.addLaser);
     const addEnemy = useGameStore(state => state.addEnemy);
@@ -55,6 +59,8 @@ const GameLogic = () => {
     const bossSpawned = useRef(false);
     const screenShake = useRef(0);
     const gameTime = useRef(0);
+    const baseCameraPos = useRef(null);
+    const lastTimeUpdate = useRef(0);
 
     // Enemy wave patterns
     const wavePatterns = [
@@ -88,6 +94,13 @@ const GameLogic = () => {
             waveCount.current = 0;
             bossSpawned.current = false;
             gameTime.current = 0;
+            lastShot.current = 0;
+            lastEnemySpawn.current = 0;
+            lastPowerUpSpawn.current = 0;
+            lastComboTick.current = 0;
+            screenShake.current = 0;
+            setWave(1);
+            setTimeLeft(0);
             playSound('game_start');
             addMessage('Wave 1: Begin!', 2000);
         }
@@ -168,21 +181,16 @@ const GameLogic = () => {
     // Handle shooting with power-ups
     const handleShooting = useCallback((time, delta) => {
         if (gesture === 'fist' || gesture === 'pointing') {
-            const isRapid = activePowerUps['rapid'] > Date.now();
-            const isMulti = activePowerUps['multi'] > Date.now();
-
-            // Base fire rate. Rapid powerup makes it faster.
-            let baseFireRate = 0.15;
-            if (gesture === 'pointing') baseFireRate = 0.25;
-
-            const fireRate = baseFireRate / Math.max(1, (powerLevel * 0.3) + (isRapid ? 2 : 0));
+            const baseRate = gesture === 'pointing' ? 0.35 : 0.15;
+            const rapidMultiplier = rapidFire ? 1.8 : 1;
+            const fireRate = baseRate / Math.max(1, powerLevel * 0.3) / rapidMultiplier;
 
             if (time - lastShot.current > fireRate) {
                 lastShot.current = time;
                 playSound('laser_shoot');
 
                 // Multi-shot based on power level
-                const shotCount = (powerLevel >= 4 || isMulti) ? 3 : 1;
+                const shotCount = multiShot ? 3 : (powerLevel >= 4 ? 3 : 1);
 
                 for (let i = 0; i < shotCount; i++) {
                     const spread = shotCount > 1 ? (i - (shotCount - 1) / 2) * 0.5 : 0;
@@ -198,7 +206,7 @@ const GameLogic = () => {
                 }
             }
         }
-    }, [gesture, handPosition, powerLevel, addLaser, playSound]);
+    }, [gesture, handPosition, powerLevel, rapidFire, multiShot, addLaser, playSound]);
 
     // Handle enemy behavior and shooting
     const updateEnemiesWithAI = useCallback((enemiesArray, time, delta) => {
@@ -221,7 +229,7 @@ const GameLogic = () => {
                 const dx = targetX - newX;
                 const dy = targetY - enemy.y;
                 const dz = 0 - newZ;
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy + dz * dz));
 
                 addLaser({
                     id: Math.random(),
@@ -265,7 +273,7 @@ const GameLogic = () => {
 
                     if (enemy.health <= 0) {
                         enemy.dead = true;
-                        const points = 500 * (enemy.type === 'tank' ? 2 : 1) * newCombo;
+                        const points = 500 * (enemy.type === 'tank' ? 2 : 1) * newCombo * scoreMultiplier;
                         newScore += points;
                         setScore(newScore);
 
@@ -314,8 +322,7 @@ const GameLogic = () => {
             const dz = laser.z - 0;
             const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            const isShielded = activePowerUps['shield'] > Date.now();
-            if (distance < 2 && !useGameStore.getState().invincible && !isShielded) {
+            if (distance < 2 && !useGameStore.getState().invincible) {
                 newHealth -= 10;
                 setHealth(newHealth);
                 playSound('player_hit');
@@ -361,16 +368,16 @@ const GameLogic = () => {
         }
 
         // Update combo timer
-        if (time.current - lastComboTick.current > 5) {
+        if (gameTime.current - lastComboTick.current > 5) {
             if (newCombo > 1) {
                 newCombo = Math.max(1, newCombo - 1);
                 setCombo(newCombo);
             }
-            lastComboTick.current = time.current;
+            lastComboTick.current = gameTime.current;
         }
 
         return { newScore, newHealth, newCombo };
-    }, [score, health, combo, handPosition, createExplosion, playSound, addMessage]);
+    }, [score, health, combo, scoreMultiplier, handPosition, createExplosion, playSound, addMessage]);
 
     // Apply power-up effects
     const applyPowerUp = useCallback((type) => {
@@ -405,7 +412,7 @@ const GameLogic = () => {
             const dx = handPosition.x * 12 - powerUp.x;
             const dy = handPosition.y * 7 - powerUp.y;
             const dz = 0 - powerUp.z;
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy + dz * dz));
 
             const speed = 15 * delta;
             const newX = powerUp.x + (dx / dist) * speed;
@@ -518,7 +525,7 @@ const GameLogic = () => {
                 const targetY = handPosition.y * 7;
                 const dx = targetX - newBoss.x;
                 const dy = targetY - newBoss.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
 
                 for (let i = -2; i <= 2; i++) {
                     const spread = i * 0.3;
@@ -574,18 +581,25 @@ const GameLogic = () => {
 
     // Main game loop
     useFrame((state, delta) => {
-        gameTime.current += delta;
         const time = state.clock.elapsedTime;
+
+        if (!baseCameraPos.current) {
+            baseCameraPos.current = state.camera.position.clone();
+        }
 
         // Update screen shake
         if (screenShake.current > 0) {
             screenShake.current = Math.max(0, screenShake.current - delta * 2);
             const shakeIntensity = screenShake.current;
-            state.camera.position.x = (Math.random() - 0.5) * shakeIntensity;
-            state.camera.position.y = (Math.random() - 0.5) * shakeIntensity;
+            state.camera.position.x = baseCameraPos.current.x + (Math.random() - 0.5) * shakeIntensity;
+            state.camera.position.y = baseCameraPos.current.y + (Math.random() - 0.5) * shakeIntensity;
+            state.camera.position.z = baseCameraPos.current.z;
+        } else if (baseCameraPos.current) {
+            state.camera.position.copy(baseCameraPos.current);
         }
 
         if (phase === 'playing') {
+            gameTime.current += delta;
             // Handle player shooting
             handleShooting(time, delta);
 
@@ -609,10 +623,9 @@ const GameLogic = () => {
                 const pattern = wavePatterns[waveCount.current % wavePatterns.length];
                 spawnEnemyWave(pattern);
                 waveCount.current++;
+                setWave(waveCount.current);
 
-                if (waveCount.current > 0) {
-                    addMessage(`Wave ${waveCount.current + 1}`, 2000);
-                }
+                addMessage(`Wave ${waveCount.current}`, 2000);
             }
 
             // Spawn power-ups occasionally
@@ -681,7 +694,7 @@ const GameLogic = () => {
             updateParticles(updatedParticles);
 
             // Time-based score (reduced to balance other score sources)
-            const newScore = score + (delta * 50 * useGameStore.getState().scoreMultiplier);
+            const newScore = score + (delta * 50 * scoreMultiplier);
             setScore(newScore);
 
             // Level up based on score
@@ -699,6 +712,11 @@ const GameLogic = () => {
             } else if (health <= 0) {
                 setPhase('gameOver');
                 playSound('game_over');
+            }
+
+            if (gameTime.current - lastTimeUpdate.current >= 0.5) {
+                setTimeLeft(gameTime.current);
+                lastTimeUpdate.current = gameTime.current;
             }
         }
     });

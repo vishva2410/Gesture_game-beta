@@ -1,7 +1,20 @@
 import { create } from 'zustand';
 
-export const useGameStore = create((set) => ({
-  // Game Phase: 'menu', 'playing', 'gameover', 'victory'
+const powerUpTimers = {};
+
+const clearTimer = (key) => {
+  if (powerUpTimers[key]) {
+    clearTimeout(powerUpTimers[key]);
+    delete powerUpTimers[key];
+  }
+};
+
+const clearAllTimers = () => {
+  Object.keys(powerUpTimers).forEach(clearTimer);
+};
+
+export const useGameStore = create((set, get) => ({
+  // Game Phase: 'menu', 'playing', 'paused', 'gameOver', 'victory'
   phase: 'menu',
 
   // Selection
@@ -21,8 +34,11 @@ export const useGameStore = create((set) => ({
   powerLevel: 1,
   scoreMultiplier: 1,
   invincible: false,
+  rapidFire: false,
+  multiShot: false,
   timeLeft: 0,
-  activePowerUps: {},
+  controlMode: 'auto', // 'auto' | 'hand' | 'keyboard'
+  keyboardActive: false,
 
   // Combat State
   lasers: [], // { id, x, y, z, type, ... }
@@ -40,26 +56,64 @@ export const useGameStore = create((set) => ({
 
   // Actions
   setPhase: (phase) => set({ phase }),
+  setWave: (wave) => set({ wave }),
+  setTimeLeft: (timeLeft) => set({ timeLeft }),
+  setControlMode: (controlMode) => set({ controlMode }),
+  setKeyboardActive: (keyboardActive) => set({ keyboardActive }),
 
   // Game Controls
-  startGame: () => set({
-    phase: 'playing',
-    score: 0,
-    health: 100,
-    distance: 0,
-    speed: 1.0,
-    wave: 1,
-    combo: 1,
-    powerLevel: 1,
-    timeLeft: 0,
-    lasers: [],
-    enemies: [],
-    powerUps: [],
-    particles: [],
-    boss: null
+  startGame: () => {
+    clearAllTimers();
+    set({
+      phase: 'playing',
+      score: 0,
+      health: 100,
+      distance: 0,
+      speed: 1.0,
+      wave: 1,
+      combo: 1,
+      powerLevel: 1,
+      scoreMultiplier: 1,
+      invincible: false,
+      rapidFire: false,
+      multiShot: false,
+      keyboardActive: false,
+      timeLeft: 0,
+      lasers: [],
+      enemies: [],
+      powerUps: [],
+      particles: [],
+      boss: null
+    });
+  },
+  resetGame: () => {
+    clearAllTimers();
+    set({
+      phase: 'menu',
+      score: 0,
+      health: 100,
+      distance: 0,
+      speed: 1.0,
+      wave: 1,
+      combo: 1,
+      powerLevel: 1,
+      scoreMultiplier: 1,
+      invincible: false,
+      rapidFire: false,
+      multiShot: false,
+      keyboardActive: false,
+      timeLeft: 0,
+      lasers: [],
+      enemies: [],
+      powerUps: [],
+      particles: [],
+      boss: null
+    });
+  },
+  pauseGame: () => set((state) => {
+    if (state.phase !== 'playing' && state.phase !== 'paused') return state;
+    return { phase: state.phase === 'playing' ? 'paused' : 'playing' };
   }),
-  resetGame: () => set({ phase: 'menu', score: 0, health: 100 }),
-  pauseGame: () => set((state) => ({ phase: state.phase === 'playing' ? 'paused' : 'playing' })),
 
   // Stats
   setScore: (score) => set((state) => ({
@@ -100,16 +154,41 @@ export const useGameStore = create((set) => ({
   // PowerUps
   addPowerUp: (powerUp) => set((state) => ({ powerUps: [...state.powerUps, powerUp] })),
   updatePowerUps: (newPowerUps) => set({ powerUps: newPowerUps }),
-  activatePowerUp: (type) => {
-    // Logic handled via GameLogic calling setPowerUpActive, or here
-    console.log("PowerUp Activated:", type);
-  },
-  setPowerUpActive: (type, duration) => set((state) => ({
-    activePowerUps: {
-      ...state.activePowerUps,
-      [type]: Date.now() + duration * 1000
+  activatePowerUp: (type, duration = 8) => {
+    if (type === 'health') {
+      set((state) => ({ health: Math.min(100, state.health + 30) }));
+      return;
     }
-  })),
+    if (type === 'double_shot') {
+      get().setPowerUpActive('multi', duration);
+      return;
+    }
+    if (type === 'shield') {
+      get().setInvincible(duration);
+      return;
+    }
+    get().setPowerUpActive(type, duration);
+  },
+  setPowerUpActive: (type, duration = 8) => {
+    const durationMs = duration * 1000;
+    if (type === 'rapid') {
+      set({ rapidFire: true });
+      clearTimer('rapid');
+      powerUpTimers.rapid = setTimeout(() => set({ rapidFire: false }), durationMs);
+      return;
+    }
+    if (type === 'multi') {
+      set({ multiShot: true });
+      clearTimer('multi');
+      powerUpTimers.multi = setTimeout(() => set({ multiShot: false }), durationMs);
+      return;
+    }
+    if (type === 'score') {
+      set({ scoreMultiplier: 2 });
+      clearTimer('score');
+      powerUpTimers.score = setTimeout(() => set({ scoreMultiplier: 1 }), durationMs);
+    }
+  },
 
   // Particles
   addParticle: (particle) => set((state) => ({ particles: [...state.particles, particle] })),
@@ -129,8 +208,7 @@ export const useGameStore = create((set) => ({
 
   // Systems
   playSound: () => {
-    // Simple audio player integration
-    // We could use a separate Audio Manager, but for now this is a placeholder hook
+    // Placeholder for future audio hooks
   },
 
   addMessage: (text) => {
@@ -138,6 +216,10 @@ export const useGameStore = create((set) => ({
     console.log("Message:", text);
   },
 
-  setInvincible: () => set({ invincible: true }), // Logic will handle timeout
+  setInvincible: (duration = 8) => {
+    set({ invincible: true });
+    clearTimer('invincible');
+    powerUpTimers.invincible = setTimeout(() => set({ invincible: false }), duration * 1000);
+  },
 
 }));

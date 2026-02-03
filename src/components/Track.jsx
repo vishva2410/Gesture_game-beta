@@ -393,6 +393,7 @@ const Track = () => {
     // Dynamic speed based on game phase and score
     const currentSpeed = useMemo(() => {
         let baseSpeed = speed * 25;
+        if (phase === 'menu' || phase === 'paused') return 0;
         if (phase === 'victory') return baseSpeed * 2;
         if (phase === 'gameOver') return baseSpeed * 0.5;
 

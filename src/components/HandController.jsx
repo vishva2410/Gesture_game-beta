@@ -186,6 +186,7 @@ const HandController = () => {
     const [showLandmarks, setShowLandmarks] = useState(true);
     const [sensitivity, setSensitivity] = useState(0.7);
     const [performanceMode, setPerformanceMode] = useState('balanced');
+    const controlMode = useGameStore((state) => state.controlMode);
 
     const gestureEngine = useMemo(() => new GestureRecognitionEngine(), []);
 
@@ -410,6 +411,8 @@ const HandController = () => {
 
             if (results.landmarks && results.landmarks.length > 0) {
                 setHandDetected(true);
+                const controlMode = useGameStore.getState().controlMode;
+                const allowHandControl = controlMode !== 'keyboard';
 
                 // Get primary hand
                 const primaryHandIndex = results.handedness[0][0].categoryName === 'Right' ? 0 :
@@ -419,37 +422,45 @@ const HandController = () => {
 
                 setHandedness(handType === 'Right' ? 'right' : 'left');
 
-                // Normalize and set position
-                const wrist = landmarks[0];
-                const position = normalizeHandPosition(wrist.x, wrist.y, wrist.z);
-                setHandPosition(position.x, position.y, position.z);
+                if (allowHandControl) {
+                    // Normalize and set position
+                    const wrist = landmarks[0];
+                    const position = normalizeHandPosition(wrist.x, wrist.y, wrist.z);
+                    setHandPosition(position.x, position.y, position.z);
 
-                // Detect gestures
-                const detectedGesture = gestureEngine.detectGestures(landmarks, handType, useGameStore.getState().gesture);
-                const smoothedGesture = gestureEngine.bufferGesture(detectedGesture);
+                    // Detect gestures
+                    const detectedGesture = gestureEngine.detectGestures(landmarks, handType, useGameStore.getState().gesture);
+                    const smoothedGesture = gestureEngine.bufferGesture(detectedGesture);
 
-                if (smoothedGesture) {
-                    setGesture(smoothedGesture.name);
-                    setGestureConfidence(smoothedGesture.confidence);
+                    if (smoothedGesture) {
+                        setGesture(smoothedGesture.name);
+                        setGestureConfidence(smoothedGesture.confidence);
 
-                    // Trigger game actions based on gesture
-                    triggerGameAction(smoothedGesture.name, smoothedGesture.confidence);
+                        // Trigger game actions based on gesture
+                        triggerGameAction(smoothedGesture.name, smoothedGesture.confidence);
+                    }
+
+                    // Store landmarks for game use
+                    setHandLandmarks(landmarks);
                 }
-
-                // Store landmarks for game use
-                setHandLandmarks(landmarks);
 
                 // Draw landmarks if enabled
                 if (canvasRef.current) {
                     drawLandmarks(landmarks, handType);
                 }
 
-                // Update calibration bounds dynamically
-                updateCalibrationBounds(wrist.x, wrist.y);
+                if (allowHandControl) {
+                    // Update calibration bounds dynamically
+                    const wrist = landmarks[0];
+                    updateCalibrationBounds(wrist.x, wrist.y);
+                }
             } else {
                 setHandDetected(false);
-                setGesture(null);
-                setGestureConfidence(0);
+                const { controlMode, keyboardActive } = useGameStore.getState();
+                if (!keyboardActive && controlMode !== 'keyboard') {
+                    setGesture(null);
+                    setGestureConfidence(0);
+                }
             }
         } catch (error) {
             console.error("Prediction error:", error);
@@ -575,7 +586,7 @@ const HandController = () => {
     useEffect(() => {
         let isActive = true;
 
-        if (isActive) {
+        if (isActive && controlMode !== 'keyboard') {
             initializeMediaPipe();
         }
 
@@ -600,7 +611,7 @@ const HandController = () => {
             }
             setLoaded(false);
         };
-    }, [initializeMediaPipe]);
+    }, [initializeMediaPipe, controlMode]);
 
     // Handle performance mode changes without full re-mount loops
     useEffect(() => {
@@ -609,6 +620,14 @@ const HandController = () => {
             console.log("Performance mode changed to:", performanceMode);
         }
     }, [performanceMode, loaded]);
+
+    useEffect(() => {
+        if (controlMode === 'keyboard') {
+            setCalibrationComplete(true);
+        } else {
+            setCalibrationComplete(false);
+        }
+    }, [controlMode]);
 
     return (
         <div style={styles.container}>
