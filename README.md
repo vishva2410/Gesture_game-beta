@@ -1,4 +1,4 @@
-# 🎮 Gesture Racer - AI-Powered Hand Tracking Game
+#  Gesture Racer - AI-Powered Hand Tracking Game
 
 ![Gesture Racer Banner](https://via.placeholder.com/1200x400/000022/00ffff?text=GESTURE+RACER+PRO)
 
@@ -11,20 +11,20 @@
 
 ---
 
-## 🌟 Why Gesture Racer?
+##  Why Gesture Racer?
 
 Gesture Racer isn't just a game; it's a tech demo of what's possible in the browser. Using **Google MediaPipe** for millisecond-latency hand tracking and **React Three Fiber** for high-performance 3D graphics, we've built a seamless experience that runs on any modern laptop.
 
-### ✨ Key Features
+###  Key Features
 
-- **🤲 Zero-Touch Interface**: Your webcam is the controller. No mouse, no keyboard, no install.
-- **🚀 3D Cyberpunk World**: Fly through neon-drenched cities and infinite procedurally generated tracks.
-- **⚡ 60 FPS Performance**: Optimized for smooth gameplay even on mid-range devices.
-- **🛡️ Dynamic Combat**: Fight AI drones with lasers, shields, and special abilities triggered by hand signs.
+- **Zero-Touch Interface**: Your webcam is the controller. No mouse, no keyboard, no install.
+- ** 3D Cyberpunk World**: Fly through neon-drenched cities and infinite procedurally generated tracks.
+- ** 60 FPS Performance**: Optimized for smooth gameplay even on mid-range devices.
+- ** Dynamic Combat**: Fight AI drones with lasers, shields, and special abilities triggered by hand signs.
 
 ---
 
-## 🕹️ Controls (Gestures)
+##  Controls (Gestures)
 
 We use advanced gesture recognition to map your hand movements to game actions instantly.
 
@@ -38,7 +38,7 @@ We use advanced gesture recognition to map your hand movements to game actions i
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - A computer with a **Webcam**.
